@@ -1,0 +1,22 @@
+{
+  "name": "NexAlfa",
+  "short_name": "Nex",
+  "description": "Your personal AI agent — no guardrails, self-improving, always on.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#818cf8",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

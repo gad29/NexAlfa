@@ -28,7 +28,7 @@ services:
       dockerfile: Dockerfile
       target: web
       args:
-        NEXT_PUBLIC_API_URL: "${NEX_PUBLIC_URL:-http://localhost:18789}"
+        NEXT_PUBLIC_API_URL: "${NEX_PUBLIC_URL:-}"
     container_name: nexalfa-web
     restart: unless-stopped
     depends_on:

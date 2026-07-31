@@ -20,7 +20,7 @@ export default function NexAlfa() {
   // ── Socket.IO Connection ────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
-    const GATEWAY = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:18789' : '');
+    const GATEWAY = '';  // relative path — same origin as the page
 
     socket.on("connect", () => {
       setConnected(true);
@@ -569,7 +569,7 @@ function ExtensionsView() {
 function SkillsView() {
   const [skills, setSkills] = useState<any[]>([]);
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:18789' : '')}/api/skills`)
+    fetch('/api/skills')
       .then(r => r.json()).then(setSkills).catch(() => {});
   }, []);
 
@@ -708,7 +708,7 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
   const [temperature, setTemperature] = useState(0.7);
   const [showThinking, setShowThinking] = useState(true);
   const [toast, setToast] = useState("");
-  const API = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:18789' : '');
+  const API = '';  // relative path — same origin as the page
 
   // Load model info
   useEffect(() => {

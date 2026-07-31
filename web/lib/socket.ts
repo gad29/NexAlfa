@@ -3,18 +3,31 @@
  */
 import { io, Socket } from 'socket.io-client';
 
-const GATEWAY_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:18789' : '');
+/**
+ * Determine the gateway URL at runtime — NOT build time.
+ * In the browser, always connect back to the same origin the page was served from.
+ * In dev, fall back to localhost.
+ */
+function getGatewayUrl(): string {
+  if (typeof window !== 'undefined') {
+    return window.location.origin;           // always correct in prod
+  }
+  return 'http://localhost:18789';            // SSR / dev fallback
+}
 
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(GATEWAY_URL || undefined, {
-      transports: ['websocket', 'polling'],
+    const url = getGatewayUrl();
+    console.log('[NexAlfa] Connecting to gateway:', url);
+    socket = io(url, {
+      transports: ['polling', 'websocket'],  // polling first — reliable behind Cloudflare
       path: '/socket.io/',
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
     });
     socket.on('connect', () => console.log('🔌 Connected to NexAlfa Gateway'));
     socket.on('disconnect', () => console.log('🔌 Disconnected from Gateway'));

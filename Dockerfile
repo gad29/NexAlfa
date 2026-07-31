@@ -55,7 +55,7 @@ EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://127.0.0.1:18789/health || exit 1
 
-CMD ["python", "-m", "gateway.server"]
+CMD ["/usr/local/bin/python", "-m", "gateway.server"]
 
 # ── Web Frontend Build Stage ──────────────────────────────────
 FROM node:20-alpine AS web-builder

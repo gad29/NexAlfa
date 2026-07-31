@@ -39,14 +39,13 @@ services:
 
   # ── Internal Router: Nginx (Coolify handles SSL) ──────────
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.nginx
     container_name: nexalfa-router
     restart: unless-stopped
-    # Expose port 80 to Coolify's proxy
     ports:
       - "80"
-    volumes:
-      - ./deploy/nginx-coolify.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - nexalfa
       - web

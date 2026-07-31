@@ -32,7 +32,12 @@ class WhatsAppChannel(BaseChannel):
     def is_configured(self) -> bool:
         settings = get_settings()
         if settings.channels.whatsapp_bridge:
-            return True  # Bridge mode is always "configurable" (pairs via QR)
+            # Bridge mode: only configured if explicitly enabled via config store
+            # or if a session file exists from a previous QR pairing
+            import os
+            session_exists = os.path.exists("/app/storage/whatsapp-session")
+            explicitly_enabled = os.environ.get("NEX_WHATSAPP_BRIDGE_ENABLED", "").lower() == "true"
+            return session_exists or explicitly_enabled
         return bool(settings.channels.whatsapp_access_token and settings.channels.whatsapp_phone_number_id)
 
     async def start(self):

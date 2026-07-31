@@ -46,6 +46,11 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(f"🚀 NexAlfa Gateway starting on {settings.gateway.host}:{settings.gateway.port}")
 
+    # Load saved config (API keys, channel credentials) into environment
+    from gateway.config_store import get_config_store
+    config_store = get_config_store()
+    config_store.inject_saved_keys()
+
     # Initialize agent
     await agent.initialize()
 
@@ -613,6 +618,108 @@ async def generic_webhook(webhook_name: str, request: Request):
     if action == "notify":
         await sio.emit("webhook_event", {"name": webhook_name, "data": data})
     return {"status": "ok", "action": action or "unknown"}
+
+# ── Channel Configuration API ─────────────────────────────
+
+@app.get("/api/channels/config")
+async def api_channels_config():
+    """Get configuration status for all channels (never returns actual secrets)."""
+    from gateway.config_store import get_config_store
+    store = get_config_store()
+    result = {}
+    channel_names = ["whatsapp", "telegram", "discord", "slack", "google_chat", "email"]
+    for name in channel_names:
+        result[name] = {
+            "fields": store.get_channel_status(name),
+            "running": channels.get(name, None) is not None and channels[name].is_running,
+            "configured": channels.get(name, None) is not None and channels[name].is_configured(),
+        }
+    return result
+
+@app.post("/api/channels/{channel_name}/config")
+async def api_set_channel_config(channel_name: str, request: Request):
+    """Save configuration for a channel."""
+    from gateway.config_store import get_config_store
+    data = await request.json()
+    store = get_config_store()
+    store.set_channel_config(channel_name, data)
+    # Reload settings so channel adapters pick up new values
+    from agent.config.settings import get_settings
+    get_settings.cache_clear() if hasattr(get_settings, 'cache_clear') else None
+    return {"status": "ok", "message": f"{channel_name} configuration saved"}
+
+@app.post("/api/channels/{channel_name}/start")
+async def api_start_channel(channel_name: str):
+    """Start a channel adapter."""
+    ch = channels.get(channel_name)
+    if not ch:
+        raise HTTPException(404, f"Channel '{channel_name}' not found")
+    if not ch.is_configured():
+        raise HTTPException(400, f"Channel '{channel_name}' is not configured. Save configuration first.")
+    if ch.is_running:
+        return {"status": "ok", "message": f"{channel_name} is already running"}
+    try:
+        await ch.start()
+        return {"status": "ok", "message": f"{channel_name} started"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to start {channel_name}: {str(e)}")
+
+@app.post("/api/channels/{channel_name}/stop")
+async def api_stop_channel(channel_name: str):
+    """Stop a channel adapter."""
+    ch = channels.get(channel_name)
+    if not ch:
+        raise HTTPException(404, f"Channel '{channel_name}' not found")
+    if not ch.is_running:
+        return {"status": "ok", "message": f"{channel_name} is already stopped"}
+    await ch.stop()
+    return {"status": "ok", "message": f"{channel_name} stopped"}
+
+@app.post("/api/channels/{channel_name}/test")
+async def api_test_channel(channel_name: str):
+    """Test a channel connection."""
+    ch = channels.get(channel_name)
+    if not ch:
+        raise HTTPException(404, f"Channel '{channel_name}' not found")
+    if not ch.is_configured():
+        raise HTTPException(400, f"Channel '{channel_name}' is not configured")
+    # Simple connectivity test
+    try:
+        if not ch.is_running:
+            await ch.start()
+        return {"status": "ok", "message": f"{channel_name} connection test successful"}
+    except Exception as e:
+        return {"status": "error", "message": f"{channel_name} test failed: {str(e)}"}
+
+# ── API Key Management ────────────────────────────────────
+
+@app.get("/api/keys")
+async def api_get_keys():
+    """Get API key status (which keys are set — never returns actual values)."""
+    from gateway.config_store import get_config_store
+    return get_config_store().get_api_keys_status()
+
+@app.post("/api/keys")
+async def api_set_key(request: Request):
+    """Set an API key. Body: { key_name: "GOOGLE_API_KEY", key_value: "..." }"""
+    from gateway.config_store import get_config_store
+    data = await request.json()
+    key_name = data.get("key_name", "")
+    key_value = data.get("key_value", "")
+    if not key_name or not key_value:
+        raise HTTPException(400, "key_name and key_value are required")
+    try:
+        get_config_store().set_api_key(key_name, key_value)
+        return {"status": "ok", "message": f"{key_name} saved"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.delete("/api/keys/{key_name}")
+async def api_delete_key(key_name: str):
+    """Delete an API key."""
+    from gateway.config_store import get_config_store
+    get_config_store().delete_api_key(key_name)
+    return {"status": "ok", "message": f"{key_name} removed"}
 
 @app.get("/health")
 async def health():

@@ -22,6 +22,9 @@ COPY gateway/ gateway/
 COPY cli/ cli/
 COPY workspace/ workspace/
 
+# Keep a pristine copy of workspace defaults (the volume mount will shadow workspace/)
+COPY workspace/ workspace-defaults/
+
 # Install Python deps
 RUN uv pip install --system -e ".[all]"
 
@@ -55,6 +58,11 @@ EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://127.0.0.1:18789/health || exit 1
 
+# Entrypoint: seeds workspace defaults on first boot
+COPY deploy/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["/usr/local/bin/python", "-m", "gateway.server"]
 
 # ── Web Frontend Build Stage ──────────────────────────────────

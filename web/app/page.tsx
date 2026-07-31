@@ -659,39 +659,224 @@ function MemoriesView({ status }: { status: AgentStatus | null }) {
 
 /* ── Channels View ───────────────────────────────────────── */
 function ChannelsView({ status }: { status: AgentStatus | null }) {
-  const channelIcons: Record<string, string> = {
-    webchat: "🌐", telegram: "✈️", discord: "🎮", slack: "💼",
-    whatsapp: "📱", google_chat: "💬", email: "📧",
+  const [configs, setConfigs] = useState<Record<string, any>>({});
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
+  const API = '';
+
+  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  useEffect(() => {
+    fetch(`${API}/api/channels/config`)
+      .then(r => r.json())
+      .then(data => setConfigs(data || {}))
+      .catch(() => flash("❌ Failed to load configs"));
+  }, []);
+
+  const handleConfigChange = (channel: string, field: string, value: string | number) => {
+    setConfigs(prev => ({
+      ...prev,
+      [channel]: { ...(prev[channel] || {}), [field]: value }
+    }));
   };
+
+  const handleSave = async (channel: string) => {
+    try {
+      const res = await fetch(`${API}/api/channels/${channel}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configs[channel] || {})
+      });
+      if (res.ok) flash(`✅ ${channel} config saved`);
+      else flash(`❌ Failed to save ${channel} config`);
+    } catch {
+      flash(`❌ Error saving ${channel} config`);
+    }
+  };
+
+  const handleToggle = async (channel: string, isRunning: boolean) => {
+    const action = isRunning ? 'stop' : 'start';
+    try {
+      const res = await fetch(`${API}/api/channels/${channel}/${action}`, { method: 'POST' });
+      if (res.ok) flash(`✅ ${channel} ${action}ed`);
+      else flash(`❌ Failed to ${action} ${channel}`);
+    } catch {
+      flash(`❌ Error trying to ${action} ${channel}`);
+    }
+  };
+
+  const handleTest = async (channel: string) => {
+    try {
+      const res = await fetch(`${API}/api/channels/${channel}/test`, { method: 'POST' });
+      if (res.ok) flash(`✅ ${channel} test passed`);
+      else flash(`❌ ${channel} test failed`);
+    } catch {
+      flash(`❌ Error testing ${channel}`);
+    }
+  };
+
+  const channelsDef = [
+    { name: 'telegram', display: 'Telegram', icon: '✈️' },
+    { name: 'discord', display: 'Discord', icon: '🎮' },
+    { name: 'slack', display: 'Slack', icon: '💼' },
+    { name: 'whatsapp', display: 'WhatsApp', icon: '📱' },
+    { name: 'google_chat', display: 'Google Chat', icon: '💬' },
+    { name: 'email', display: 'Email', icon: '📧' }
+  ];
 
   return (
     <>
       <div className="page-header">
         <span className="page-title">📡 Channels</span>
+        {toast && <span className="channel-badge online" style={{ animation: "fadeIn 0.3s ease" }}>{toast}</span>}
       </div>
       <div className="page-body">
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {(status?.channels || []).map((ch) => (
-            <div key={ch.name} className="card">
-              <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <span style={{ fontSize: 28 }}>{channelIcons[ch.name] || "📡"}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{ch.display_name}</div>
-                  <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                    {ch.running ? "Running" : ch.configured ? "Configured — not running" : "Not configured"}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {channelsDef.map((ch) => {
+            const chStatus = status?.channels?.find(c => c.name === ch.name);
+            const isRunning = chStatus?.running || false;
+            const isConfigured = chStatus?.configured || false;
+            const isExpanded = expanded === ch.name;
+            const cData = configs[ch.name] || {};
+
+            return (
+              <div key={ch.name} style={{ background: "rgba(30,30,30,0.4)", backdropFilter: "blur(10px)", borderRadius: 12, border: "1px solid var(--surface-2)", overflow: "hidden" }}>
+                <div 
+                  onClick={() => setExpanded(isExpanded ? null : ch.name)}
+                  style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", cursor: "pointer" }}
+                >
+                  <span style={{ fontSize: 28 }}>{ch.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 16 }}>{ch.display}</div>
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                      {isRunning ? "Running" : isConfigured ? "Configured — not running" : "Not configured"}
+                    </div>
                   </div>
+                  <span className={`channel-badge ${isRunning ? "online" : isConfigured ? "configured" : "offline"}`}>
+                    {isRunning ? "● Running" : isConfigured ? "◐ Configured" : "○ Offline"}
+                  </span>
+                  <span style={{ fontSize: 20, color: "var(--text-tertiary)", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                    ▼
+                  </span>
                 </div>
-                <span className={`channel-badge ${ch.running ? "online" : ch.configured ? "configured" : "offline"}`}>
-                  {ch.running ? "● Online" : ch.configured ? "● Ready" : "○ Offline"}
-                </span>
+                
+                {isExpanded && (
+                  <div style={{ padding: "0 20px 20px 20px", borderTop: "1px solid var(--surface-2)", display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
+                    
+                    {ch.name === 'telegram' && (
+                      <div>
+                        <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Bot Token</label>
+                        <input type="password" value={cData.bot_token || ''} onChange={(e) => handleConfigChange(ch.name, 'bot_token', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                      </div>
+                    )}
+
+                    {ch.name === 'discord' && (
+                      <div>
+                        <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Bot Token</label>
+                        <input type="password" value={cData.bot_token || ''} onChange={(e) => handleConfigChange(ch.name, 'bot_token', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                      </div>
+                    )}
+
+                    {ch.name === 'slack' && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Bot Token</label>
+                          <input type="password" value={cData.bot_token || ''} onChange={(e) => handleConfigChange(ch.name, 'bot_token', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>App Token</label>
+                          <input type="password" value={cData.app_token || ''} onChange={(e) => handleConfigChange(ch.name, 'app_token', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {ch.name === 'whatsapp' && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Mode</label>
+                          <select value={cData.mode || 'bridge'} onChange={(e) => handleConfigChange(ch.name, 'mode', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }}>
+                            <option value="bridge">Bridge</option>
+                            <option value="cloud_api">Cloud API</option>
+                          </select>
+                        </div>
+                        {cData.mode === 'cloud_api' && (
+                          <>
+                            <div>
+                              <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Phone Number ID</label>
+                              <input type="text" value={cData.phone_number_id || ''} onChange={(e) => handleConfigChange(ch.name, 'phone_number_id', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Business Account ID</label>
+                              <input type="text" value={cData.business_account_id || ''} onChange={(e) => handleConfigChange(ch.name, 'business_account_id', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Access Token</label>
+                              <input type="password" value={cData.access_token || ''} onChange={(e) => handleConfigChange(ch.name, 'access_token', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Verify Token</label>
+                              <input type="text" value={cData.verify_token || ''} onChange={(e) => handleConfigChange(ch.name, 'verify_token', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {ch.name === 'google_chat' && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Credentials File Path</label>
+                          <input type="text" value={cData.credentials_file || ''} onChange={(e) => handleConfigChange(ch.name, 'credentials_file', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Project ID</label>
+                          <input type="text" value={cData.project_id || ''} onChange={(e) => handleConfigChange(ch.name, 'project_id', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {ch.name === 'email' && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>SMTP Host</label>
+                          <input type="text" value={cData.smtp_host || ''} onChange={(e) => handleConfigChange(ch.name, 'smtp_host', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>SMTP Port</label>
+                          <input type="number" value={cData.smtp_port || ''} onChange={(e) => handleConfigChange(ch.name, 'smtp_port', Number(e.target.value))} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>IMAP Host</label>
+                          <input type="text" value={cData.imap_host || ''} onChange={(e) => handleConfigChange(ch.name, 'imap_host', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>IMAP Port</label>
+                          <input type="number" value={cData.imap_port || ''} onChange={(e) => handleConfigChange(ch.name, 'imap_port', Number(e.target.value))} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Email Address</label>
+                          <input type="email" value={cData.address || ''} onChange={(e) => handleConfigChange(ch.name, 'address', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Password</label>
+                          <input type="password" value={cData.password || ''} onChange={(e) => handleConfigChange(ch.name, 'password', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }} />
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                      <button className="settings-btn active" onClick={() => handleSave(ch.name)}>Save Config</button>
+                      <button className="settings-btn" onClick={() => handleToggle(ch.name, isRunning)}>
+                        {isRunning ? "Stop" : "Start"}
+                      </button>
+                      <button className="settings-btn" onClick={() => handleTest(ch.name)}>Test Connection</button>
+                    </div>
+
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-          {(!status?.channels || status.channels.length === 0) && (
-            <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-secondary)" }}>
-              Connect to the gateway to see channel status.
-            </div>
-          )}
+            );
+          })}
         </div>
       </div>
     </>
@@ -708,9 +893,11 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
   const [temperature, setTemperature] = useState(0.7);
   const [showThinking, setShowThinking] = useState(true);
   const [toast, setToast] = useState("");
+  const [apiKeys, setApiKeys] = useState<Record<string, boolean>>({});
+  const [keyValues, setKeyValues] = useState<Record<string, string>>({});
   const API = '';  // relative path — same origin as the page
 
-  // Load model info
+  // Load model info & api keys
   useEffect(() => {
     fetch(`${API}/api/model`).then(r => r.json()).then(data => {
       setModelInfo(data);
@@ -720,6 +907,8 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
       setThinkingLevel(data.thinking_level || "medium");
       setTemperature(data.temperature ?? 0.7);
     }).catch(() => {});
+    
+    fetch(`${API}/api/keys`).then(r => r.json()).then(setApiKeys).catch(() => {});
   }, [API]);
 
   useEffect(() => {
@@ -729,6 +918,41 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
+  };
+
+  const handleSaveKey = async (keyName: string) => {
+    const value = keyValues[keyName];
+    if (!value) return;
+    try {
+      const res = await fetch(`${API}/api/keys`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key_name: keyName, key_value: value })
+      });
+      if (res.ok) {
+        flash(`✅ ${keyName} saved`);
+        setApiKeys(prev => ({ ...prev, [keyName]: true }));
+        setKeyValues(prev => ({ ...prev, [keyName]: "" })); // clear input
+      } else {
+        flash(`❌ Failed to save ${keyName}`);
+      }
+    } catch {
+      flash(`❌ Error saving ${keyName}`);
+    }
+  };
+
+  const handleDeleteKey = async (keyName: string) => {
+    try {
+      const res = await fetch(`${API}/api/keys/${keyName}`, { method: "DELETE" });
+      if (res.ok) {
+        flash(`🗑️ ${keyName} deleted`);
+        setApiKeys(prev => ({ ...prev, [keyName]: false }));
+      } else {
+        flash(`❌ Failed to delete ${keyName}`);
+      }
+    } catch {
+      flash(`❌ Error deleting ${keyName}`);
+    }
   };
 
   const changeModel = async (model: string) => {
@@ -782,8 +1006,41 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
       </div>
       <div className="page-body">
 
-        {/* ── Provider & Model ─────────────────────────── */}
+        {/* ── API Keys ─────────────────────────── */}
         <div className="settings-section">
+          <div className="settings-section-title">🔑 API KEYS</div>
+          <div className="card">
+            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {["GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "OLLAMA_API_BASE"].map(k => (
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--surface-2)", padding: 12, borderRadius: 12 }}>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{k}</span>
+                      <span className={`channel-badge ${apiKeys[k] ? "online" : "offline"}`}>
+                        {apiKeys[k] ? "✅ Set" : "❌ Not set"}
+                      </span>
+                    </div>
+                    <input
+                      type="password"
+                      placeholder={`Enter new ${k}...`}
+                      value={keyValues[k] || ""}
+                      onChange={e => setKeyValues(prev => ({ ...prev, [k]: e.target.value }))}
+                      className="settings-input"
+                      style={{ width: "100%", borderRadius: 8, padding: "8px 12px", marginTop: 4 }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <button className="settings-btn active" onClick={() => handleSaveKey(k)} disabled={!keyValues[k]}>Save</button>
+                    <button className="settings-btn" onClick={() => handleDeleteKey(k)} disabled={!apiKeys[k]}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Provider & Model ─────────────────────────── */}
+        <div className="settings-section" style={{ marginTop: 32 }}>
           <div className="settings-section-title">🤖 Model & Provider</div>
           <div className="card">
             <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 20 }}>

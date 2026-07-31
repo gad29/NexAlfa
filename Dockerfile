@@ -80,4 +80,5 @@ COPY --from=web-builder /web/.next/static ./.next/static
 COPY --from=web-builder /web/public ./public
 
 EXPOSE 3000
+ENV HOSTNAME="0.0.0.0"
 CMD ["node", "server.js"]

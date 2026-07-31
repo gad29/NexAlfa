@@ -3,7 +3,7 @@
  */
 import { io, Socket } from 'socket.io-client';
 
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:18789';
+const GATEWAY_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:18789' : '');
 
 let socket: Socket | null = null;
 

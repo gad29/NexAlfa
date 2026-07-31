@@ -9,8 +9,9 @@ let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(GATEWAY_URL, {
+    socket = io(GATEWAY_URL || undefined, {
       transports: ['websocket', 'polling'],
+      path: '/socket.io/',
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,

@@ -888,10 +888,6 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
           </div>
         </div>
 
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* ── Thinking Level ──────────────────────────── */}
         <div className="settings-section">

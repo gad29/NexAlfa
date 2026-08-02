@@ -29,29 +29,46 @@ class WhatsAppChannel(BaseChannel):
         self._mode = "bridge"  # or "cloud_api"
         self._http_client: Optional[httpx.AsyncClient] = None
 
+    def _get_config(self):
+        from gateway.config_store import get_config_store
+        store = get_config_store()
+        config = store.get_channel_config("whatsapp")
+        mode = config.get("mode")
+        if not mode:
+            # Fallback to settings.py
+            settings = get_settings()
+            mode = "bridge" if settings.channels.whatsapp_bridge else "cloud_api"
+        return mode, config
+
     def is_configured(self) -> bool:
-        settings = get_settings()
-        if settings.channels.whatsapp_bridge:
-            # Bridge mode: only configured if explicitly enabled via config store
+        mode, config = self._get_config()
+        if mode == "bridge":
+            # Bridge mode: only configured if explicitly enabled via UI (mode in config)
             # or if a session file exists from a previous QR pairing
             import os
             session_exists = os.path.exists("/app/storage/whatsapp-session")
-            explicitly_enabled = os.environ.get("NEX_WHATSAPP_BRIDGE_ENABLED", "").lower() == "true"
+            explicitly_enabled = "mode" in config and config["mode"] == "bridge"
             return session_exists or explicitly_enabled
-        return bool(settings.channels.whatsapp_access_token and settings.channels.whatsapp_phone_number_id)
+        
+        settings = get_settings()
+        token = config.get("access_token") or settings.channels.whatsapp_access_token
+        phone_id = config.get("phone_number_id") or settings.channels.whatsapp_phone_number_id
+        return bool(token and phone_id)
 
     async def start(self):
+        mode, config = self._get_config()
         settings = get_settings()
-        if settings.channels.whatsapp_bridge:
+        if mode == "bridge":
             self._mode = "bridge"
             logger.info("WhatsApp starting in bridge mode (whatsapp-web.js)")
             # Bridge mode: the gateway webhook endpoint handles incoming messages
             # The actual bridge runs as a separate process
         else:
             self._mode = "cloud_api"
+            token = config.get("access_token") or settings.channels.whatsapp_access_token
             self._http_client = httpx.AsyncClient(
                 base_url="https://graph.facebook.com/v21.0",
-                headers={"Authorization": f"Bearer {settings.channels.whatsapp_access_token}"},
+                headers={"Authorization": f"Bearer {token}"},
             )
             logger.info("WhatsApp starting in Cloud API mode")
 
@@ -75,8 +92,9 @@ class WhatsAppChannel(BaseChannel):
 
     async def _send_cloud_api(self, to: str, text: str):
         """Send via Meta WhatsApp Cloud API."""
+        _, config = self._get_config()
         settings = get_settings()
-        phone_id = settings.channels.whatsapp_phone_number_id
+        phone_id = config.get("phone_number_id") or settings.channels.whatsapp_phone_number_id
         try:
             response = await self._http_client.post(
                 f"/{phone_id}/messages",

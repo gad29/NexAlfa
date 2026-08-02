@@ -161,7 +161,7 @@ class ConfigStore:
         """Map config field names to environment variable names."""
         mappings = {
             "whatsapp": {
-                "bridge": "NEX_WHATSAPP_BRIDGE",
+                "mode": "NEX_WHATSAPP_MODE",
                 "phone_number_id": "WHATSAPP_PHONE_NUMBER_ID",
                 "business_account_id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
                 "access_token": "WHATSAPP_ACCESS_TOKEN",

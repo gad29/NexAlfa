@@ -109,6 +109,40 @@ def setup():
     run_onboarding()
 
 
+@cli.command(name="app")
+def app_command():
+    """Launch native PC desktop chat window."""
+    from cli.desktop_launcher import launch_desktop_app
+    launch_desktop_app()
+
+
+@cli.command(name="desktop")
+def desktop_command():
+    """Launch native PC desktop chat window."""
+    from cli.desktop_launcher import launch_desktop_app
+    launch_desktop_app()
+
+
+@cli.command(name="doctor")
+def doctor_command():
+    """Run environment health diagnostics."""
+    from cli.doctor import run_doctor
+    run_doctor()
+
+
+@cli.group(name="domain")
+def domain_group():
+    """Manage custom domain setup."""
+    pass
+
+
+@domain_group.command(name="setup")
+def domain_setup_command():
+    """Configure custom domain & reverse proxy."""
+    from cli.domain_setup import run_domain_setup
+    run_domain_setup()
+
+
 # ═══════════════════════════════════════════════════════════
 # Status & Diagnostics
 # ═══════════════════════════════════════════════════════════

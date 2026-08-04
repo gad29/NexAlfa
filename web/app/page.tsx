@@ -1018,8 +1018,14 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
   const [oauthTokens, setOauthTokens] = useState<Record<string, string>>({});
   const API = '';  // relative path — same origin as the page
 
+  const [permissions, setPermissions] = useState<Record<string, any>>({});
+
   const fetchOauth = () => {
     fetch(`${API}/api/oauth`).then(r => r.json()).then(setOauthStatus).catch(() => {});
+  };
+
+  const fetchPermissions = () => {
+    fetch(`${API}/api/permissions`).then(r => r.json()).then(setPermissions).catch(() => {});
   };
 
   // Load model info & api keys
@@ -1035,6 +1041,7 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
     
     fetch(`${API}/api/keys`).then(r => r.json()).then(setApiKeys).catch(() => {});
     fetchOauth();
+    fetchPermissions();
   }, [API]);
 
   useEffect(() => {
@@ -1078,6 +1085,22 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
       }
     } catch {
       flash(`❌ Error deleting ${keyName}`);
+    }
+  };
+
+  const updatePermission = async (key: string, value: any) => {
+    try {
+      const res = await fetch(`${API}/api/permissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value })
+      });
+      if (res.ok) {
+        flash(`✅ Permission updated: ${key}`);
+        fetchPermissions();
+      }
+    } catch {
+      flash(`❌ Error updating permission: ${key}`);
     }
   };
 
@@ -1167,8 +1190,61 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
       </div>
       <div className="page-body">
 
-        {/* ── API Keys ─────────────────────────── */}
+        {/* ── System Permissions ─────────────────────────── */}
         <div className="settings-section">
+          <div className="settings-section-title">🔐 System Permissions & Capabilities</div>
+          <div className="card">
+            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--surface-2)", padding: 12, borderRadius: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>Shell Command Execution</div>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Allow agent to run system terminal commands</div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["allowed", "ask", "disabled"].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => updatePermission("allow_shell", mode)}
+                      className={`settings-btn ${(permissions.allow_shell || "ask") === mode ? "active" : ""}`}
+                      style={{ textTransform: "capitalize" }}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--surface-2)", padding: 12, borderRadius: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>Desktop GUI Automation & Screenshots</div>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Allow screen capture and desktop automation</div>
+                </div>
+                <button
+                  onClick={() => updatePermission("allow_desktop", !(permissions.allow_desktop ?? true))}
+                  className={`settings-btn ${(permissions.allow_desktop ?? true) ? "active" : ""}`}
+                >
+                  {(permissions.allow_desktop ?? true) ? "● Enabled" : "○ Disabled"}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--surface-2)", padding: 12, borderRadius: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>Web Browser Automation (Playwright)</div>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Allow browser navigation and form filling</div>
+                </div>
+                <button
+                  onClick={() => updatePermission("allow_browser", !(permissions.allow_browser ?? true))}
+                  className={`settings-btn ${(permissions.allow_browser ?? true) ? "active" : ""}`}
+                >
+                  {(permissions.allow_browser ?? true) ? "● Enabled" : "○ Disabled"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── API Keys ─────────────────────────── */}
+        <div className="settings-section" style={{ marginTop: 32 }}>
           <div className="settings-section-title">🔑 API KEYS</div>
           <div className="card">
             <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>

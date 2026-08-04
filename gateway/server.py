@@ -776,6 +776,29 @@ async def api_delete_oauth(provider: str):
     auth_sink.remove_provider(provider.lower())
     return {"status": "ok", "message": f"{provider} unlinked"}
 
+# ── System Permissions & Doctor API ───────────────────────
+
+@app.get("/api/permissions")
+async def api_get_permissions():
+    """Get system permission settings."""
+    from agent.core.permissions import permissions_manager
+    return permissions_manager.get_all()
+
+@app.post("/api/permissions")
+async def api_update_permissions(request: Request):
+    """Update system permission settings."""
+    from agent.core.permissions import permissions_manager
+    data = await request.json()
+    permissions_manager.update(data)
+    return {"status": "ok", "message": "Permissions updated", "permissions": permissions_manager.get_all()}
+
+@app.get("/api/doctor")
+async def api_run_doctor():
+    """Run environment health diagnostics."""
+    from cli.doctor import run_doctor
+    results = run_doctor()
+    return {"status": "ok", "results": results}
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "agent": agent.settings.agent_name}

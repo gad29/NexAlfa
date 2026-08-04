@@ -7,6 +7,7 @@ Supports two modes:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -28,6 +29,7 @@ class WhatsAppChannel(BaseChannel):
         super().__init__()
         self._mode = "bridge"  # or "cloud_api"
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._bridge_process: Optional[asyncio.subprocess.Process] = None
 
     def _get_config(self):
         from gateway.config_store import get_config_store
@@ -60,9 +62,8 @@ class WhatsAppChannel(BaseChannel):
         settings = get_settings()
         if mode == "bridge":
             self._mode = "bridge"
-            logger.info("WhatsApp starting in bridge mode (whatsapp-web.js)")
-            # Bridge mode: the gateway webhook endpoint handles incoming messages
-            # The actual bridge runs as a separate process
+            logger.info("WhatsApp starting in bridge mode (Baileys Node.js process)")
+            await self._ensure_bridge_running()
         else:
             self._mode = "cloud_api"
             token = config.get("access_token") or settings.channels.whatsapp_access_token
@@ -75,9 +76,46 @@ class WhatsAppChannel(BaseChannel):
         self._running = True
         logger.info(f"✅ WhatsApp channel started (mode: {self._mode})")
 
+    async def _ensure_bridge_running(self):
+        """Check if bridge server is reachable on port 3001, spawn node subprocess if not."""
+        import asyncio
+        import os
+        from pathlib import Path
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get("http://localhost:3001/health", timeout=2.0)
+                if resp.status_code == 200:
+                    logger.info("WhatsApp bridge subprocess is already running.")
+                    return
+        except Exception:
+            pass
+
+        # Spawn bridge script
+        script_path = Path(__file__).parent / "whatsapp_bridge.js"
+        if script_path.exists():
+            logger.info(f"🚀 Spawning WhatsApp bridge process: node {script_path}")
+            try:
+                self._bridge_process = await asyncio.create_subprocess_exec(
+                    "node", str(script_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                logger.info(f"✅ WhatsApp bridge process spawned (PID {self._bridge_process.pid})")
+            except Exception as e:
+                logger.error(f"❌ Failed to spawn WhatsApp bridge script: {e}")
+        else:
+            logger.error(f"❌ WhatsApp bridge script not found at {script_path}")
+
     async def stop(self):
         if self._http_client:
             await self._http_client.aclose()
+        if self._bridge_process:
+            try:
+                self._bridge_process.terminate()
+            except Exception:
+                pass
+            self._bridge_process = None
         self._running = False
 
     async def send(self, message: OutboundMessage):

@@ -721,6 +721,61 @@ async def api_delete_key(key_name: str):
     get_config_store().delete_api_key(key_name)
     return {"status": "ok", "message": f"{key_name} removed"}
 
+# ── WhatsApp QR & Status Relay ────────────────────────────
+_whatsapp_qr_code: Optional[str] = None
+
+@app.post("/api/channels/whatsapp/qr")
+async def api_set_whatsapp_qr(request: Request):
+    """Bridge sends QR code update."""
+    global _whatsapp_qr_code
+    data = await request.json()
+    _whatsapp_qr_code = data.get("qr")
+    await sio.emit("whatsapp_qr", {"qr": _whatsapp_qr_code})
+    return {"status": "ok"}
+
+@app.get("/api/channels/whatsapp/qr")
+async def api_get_whatsapp_qr():
+    """Web UI polls or fetches current QR code data URL."""
+    return {"qr": _whatsapp_qr_code}
+
+@app.post("/api/channels/whatsapp/status")
+async def api_set_whatsapp_status(request: Request):
+    """Bridge sends connection status update."""
+    global _whatsapp_qr_code
+    data = await request.json()
+    status = data.get("status")
+    if status == "connected":
+        _whatsapp_qr_code = None
+    await sio.emit("whatsapp_status", {"status": status, "qr": _whatsapp_qr_code})
+    return {"status": "ok"}
+
+# ── OAuth Account Management ──────────────────────────────
+
+@app.get("/api/oauth")
+async def api_get_oauth():
+    """Get status of linked OAuth profiles."""
+    from agent.auth.oauth_sink import auth_sink
+    return auth_sink.get_status_map()
+
+@app.post("/api/oauth/{provider}")
+async def api_save_oauth(provider: str, request: Request):
+    """Save an OAuth session token or access token for a provider."""
+    from agent.auth.oauth_sink import auth_sink
+    data = await request.json()
+    token = data.get("token", "") or data.get("access_token", "")
+    metadata = data.get("metadata", {})
+    if not token:
+        raise HTTPException(400, "token field is required")
+    auth_sink.save_token(provider.lower(), token, metadata)
+    return {"status": "ok", "message": f"{provider} linked successfully"}
+
+@app.delete("/api/oauth/{provider}")
+async def api_delete_oauth(provider: str):
+    """Remove an OAuth session profile."""
+    from agent.auth.oauth_sink import auth_sink
+    auth_sink.remove_provider(provider.lower())
+    return {"status": "ok", "message": f"{provider} unlinked"}
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "agent": agent.settings.agent_name}

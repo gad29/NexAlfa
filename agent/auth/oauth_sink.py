@@ -61,5 +61,10 @@ class OAuthSink:
             self._save()
             logger.info(f"Removed OAuth profile for provider: {provider}")
 
+    def get_status_map(self) -> Dict[str, bool]:
+        """Return dict of provider_name -> bool (connected)."""
+        providers = ["openai", "anthropic", "cursor", "codex", "google"]
+        return {p: self.has_provider(p) for p in providers}
+
 # Singleton instance
 auth_sink = OAuthSink()

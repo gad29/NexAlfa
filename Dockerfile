@@ -15,8 +15,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
 # Copy project files
-COPY pyproject.toml .
+COPY pyproject.toml package.json ./
 COPY README.md .
+RUN npm install --omit=dev
 COPY agent/ agent/
 COPY gateway/ gateway/
 COPY cli/ cli/

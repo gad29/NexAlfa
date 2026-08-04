@@ -521,11 +521,56 @@ function DashboardView({ status, connected }: { status: AgentStatus | null; conn
 /* ── Extensions View ─────────────────────────────────────── */
 function ExtensionsView() {
   const [toast, setToast] = useState("");
+  const [oauthStatus, setOauthStatus] = useState<Record<string, boolean>>({});
+  const [tokens, setTokens] = useState<Record<string, string>>({});
+  const API = '';
+
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
-  
-  const handleConnect = (name: string) => {
-    // This would typically trigger an OAuth popup or prompt for a token
-    flash(`🔗 Connecting to ${name}... (Requires OAuth link)`);
+
+  const fetchOauth = () => {
+    fetch(`${API}/api/oauth`)
+      .then(r => r.json())
+      .then(setOauthStatus)
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchOauth();
+  }, []);
+
+  const handleLink = async (provider: string) => {
+    const token = tokens[provider];
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/oauth/${provider}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      if (res.ok) {
+        flash(`✅ ${provider} account linked!`);
+        setTokens(prev => ({ ...prev, [provider]: "" }));
+        fetchOauth();
+      } else {
+        flash(`❌ Failed to link ${provider}`);
+      }
+    } catch {
+      flash(`❌ Error linking ${provider}`);
+    }
+  };
+
+  const handleUnlink = async (provider: string) => {
+    try {
+      const res = await fetch(`${API}/api/oauth/${provider}`, { method: "DELETE" });
+      if (res.ok) {
+        flash(`🗑️ ${provider} unlinked`);
+        fetchOauth();
+      } else {
+        flash(`❌ Failed to unlink ${provider}`);
+      }
+    } catch {
+      flash(`❌ Error unlinking ${provider}`);
+    }
   };
 
   const extensions = [
@@ -541,24 +586,56 @@ function ExtensionsView() {
         {toast && <span className="channel-badge online" style={{ animation: "fadeIn 0.3s ease" }}>{toast}</span>}
       </div>
       <div className="page-body">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-          {extensions.map(ext => (
-            <div key={ext.name} className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 32 }}>{ext.icon}</span>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 600 }}>{ext.name}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", textTransform: "uppercase" }}>{ext.provider}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {extensions.map(ext => {
+            const isConnected = oauthStatus[ext.provider] || false;
+            return (
+              <div key={ext.name} className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 32 }}>{ext.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 18, fontWeight: 600 }}>{ext.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-tertiary)", textTransform: "uppercase" }}>{ext.provider}</div>
+                  </div>
+                  <span className={`channel-badge ${isConnected ? "online" : "offline"}`}>
+                    {isConnected ? "● Connected" : "○ Disconnected"}
+                  </span>
+                </div>
+                <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
+                  {ext.desc}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: "auto" }}>
+                  <input
+                    type="password"
+                    placeholder={`Paste ${ext.name} OAuth / Session Token...`}
+                    value={tokens[ext.provider] || ""}
+                    onChange={e => setTokens(prev => ({ ...prev, [ext.provider]: e.target.value }))}
+                    className="settings-input"
+                    style={{ width: "100%", borderRadius: 8, padding: "8px 12px" }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="settings-btn active"
+                      onClick={() => handleLink(ext.provider)}
+                      disabled={!tokens[ext.provider]}
+                      style={{ flex: 1, justifyContent: "center" }}
+                    >
+                      {isConnected ? "Update Link" : "Link OAuth"}
+                    </button>
+                    {isConnected && (
+                      <button
+                        className="settings-btn"
+                        onClick={() => handleUnlink(ext.provider)}
+                        style={{ justifyContent: "center" }}
+                      >
+                        Unlink
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div style={{ color: "var(--text-secondary)", fontSize: 14, flex: 1 }}>
-                {ext.desc}
-              </div>
-              <button className="settings-btn active" onClick={() => handleConnect(ext.name)} style={{ width: "100%", justifyContent: "center" }}>
-                Connect Integration
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </>
@@ -661,16 +738,28 @@ function MemoriesView({ status }: { status: AgentStatus | null }) {
 function ChannelsView({ status }: { status: AgentStatus | null }) {
   const [configs, setConfigs] = useState<Record<string, any>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const API = '';
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  const fetchQr = () => {
+    fetch(`${API}/api/channels/whatsapp/qr`)
+      .then(r => r.json())
+      .then(data => setWhatsappQr(data.qr || null))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     fetch(`${API}/api/channels/config`)
       .then(r => r.json())
       .then(data => setConfigs(data || {}))
       .catch(() => flash("❌ Failed to load configs"));
+
+    fetchQr();
+    const interval = setInterval(fetchQr, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleConfigChange = (channel: string, field: string, value: string | number) => {
@@ -698,8 +787,14 @@ function ChannelsView({ status }: { status: AgentStatus | null }) {
     const action = isRunning ? 'stop' : 'start';
     try {
       const res = await fetch(`${API}/api/channels/${channel}/${action}`, { method: 'POST' });
-      if (res.ok) flash(`✅ ${channel} ${action}ed`);
-      else flash(`❌ Failed to ${action} ${channel}`);
+      if (res.ok) {
+        flash(`✅ ${channel} ${action}ed`);
+        if (channel === 'whatsapp' && action === 'start') {
+          setTimeout(fetchQr, 1000);
+        }
+      } else {
+        flash(`❌ Failed to ${action} ${channel}`);
+      }
     } catch {
       flash(`❌ Error trying to ${action} ${channel}`);
     }
@@ -791,14 +886,38 @@ function ChannelsView({ status }: { status: AgentStatus | null }) {
                     )}
 
                     {ch.name === 'whatsapp' && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                         <div>
                           <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Mode</label>
                           <select value={cData.mode || 'bridge'} onChange={(e) => handleConfigChange(ch.name, 'mode', e.target.value)} className="settings-input" style={{ width: "100%", borderRadius: 8 }}>
-                            <option value="bridge">Bridge</option>
-                            <option value="cloud_api">Cloud API</option>
+                            <option value="bridge">Bridge (QR Code)</option>
+                            <option value="cloud_api">Meta Cloud API</option>
                           </select>
                         </div>
+
+                        {(cData.mode || 'bridge') === 'bridge' && (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: 16, background: "rgba(0,0,0,0.3)", borderRadius: 12, border: "1px solid var(--surface-2)" }}>
+                            {whatsappQr ? (
+                              <>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)" }}>
+                                  📱 Scan this QR Code with WhatsApp on your phone:
+                                </div>
+                                <img src={whatsappQr} alt="WhatsApp QR Code" style={{ width: 220, height: 220, borderRadius: 8, border: "4px solid white" }} />
+                                <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                                  Open WhatsApp → Settings → Linked Devices → Link a Device
+                                </div>
+                              </>
+                            ) : isRunning ? (
+                              <div style={{ fontSize: 14, color: "#4ade80", fontWeight: 600 }}>
+                                ✅ WhatsApp Bridge is connected and online!
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                                Click <strong>Save Config</strong> and <strong>Start</strong> below to generate a QR Code.
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {cData.mode === 'cloud_api' && (
                           <>
                             <div>
@@ -895,7 +1014,13 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
   const [toast, setToast] = useState("");
   const [apiKeys, setApiKeys] = useState<Record<string, boolean>>({});
   const [keyValues, setKeyValues] = useState<Record<string, string>>({});
+  const [oauthStatus, setOauthStatus] = useState<Record<string, boolean>>({});
+  const [oauthTokens, setOauthTokens] = useState<Record<string, string>>({});
   const API = '';  // relative path — same origin as the page
+
+  const fetchOauth = () => {
+    fetch(`${API}/api/oauth`).then(r => r.json()).then(setOauthStatus).catch(() => {});
+  };
 
   // Load model info & api keys
   useEffect(() => {
@@ -909,6 +1034,7 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
     }).catch(() => {});
     
     fetch(`${API}/api/keys`).then(r => r.json()).then(setApiKeys).catch(() => {});
+    fetchOauth();
   }, [API]);
 
   useEffect(() => {
@@ -952,6 +1078,41 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
       }
     } catch {
       flash(`❌ Error deleting ${keyName}`);
+    }
+  };
+
+  const handleSaveOauth = async (provider: string) => {
+    const token = oauthTokens[provider];
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/oauth/${provider}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      if (res.ok) {
+        flash(`✅ ${provider} account linked!`);
+        setOauthTokens(prev => ({ ...prev, [provider]: "" }));
+        fetchOauth();
+      } else {
+        flash(`❌ Failed to link ${provider}`);
+      }
+    } catch {
+      flash(`❌ Error linking ${provider}`);
+    }
+  };
+
+  const handleUnlinkOauth = async (provider: string) => {
+    try {
+      const res = await fetch(`${API}/api/oauth/${provider}`, { method: "DELETE" });
+      if (res.ok) {
+        flash(`🗑️ ${provider} unlinked`);
+        fetchOauth();
+      } else {
+        flash(`❌ Failed to unlink ${provider}`);
+      }
+    } catch {
+      flash(`❌ Error unlinking ${provider}`);
     }
   };
 
@@ -1120,27 +1281,54 @@ function SettingsView({ status }: { status: AgentStatus | null }) {
                 Connect your ChatGPT Plus or Claude Pro web sessions to use them inside NexAlfa without API costs.
               </div>
               
-              <div style={{ display: "flex", alignItems: "center", gap: 16, background: "var(--surface-2)", padding: 16, borderRadius: 12 }}>
-                <span style={{ fontSize: 24 }}>🟢</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>ChatGPT Plus</div>
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Status: Disconnected</div>
-                </div>
-                <button className="settings-btn" onClick={() => flash("Paste your OpenAI session token in chat: /connect openai <token>")}>
-                  Link Account
-                </button>
-              </div>
+              {[
+                { provider: "openai", label: "ChatGPT Plus", icon: "🟢" },
+                { provider: "anthropic", label: "Claude Pro", icon: "🟣" }
+              ].map(({ provider, label, icon }) => {
+                const isConnected = oauthStatus[provider] || false;
+                return (
+                  <div key={provider} style={{ display: "flex", flexDirection: "column", gap: 12, background: "var(--surface-2)", padding: 16, borderRadius: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontSize: 24 }}>{icon}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600 }}>{label}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                          Provider: {provider}
+                        </div>
+                      </div>
+                      <span className={`channel-badge ${isConnected ? "online" : "offline"}`}>
+                        {isConnected ? "● Connected" : "○ Disconnected"}
+                      </span>
+                    </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 16, background: "var(--surface-2)", padding: 16, borderRadius: 12 }}>
-                <span style={{ fontSize: 24 }}>🟣</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>Claude Pro</div>
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Status: Disconnected</div>
-                </div>
-                <button className="settings-btn" onClick={() => flash("Paste your Anthropic session token in chat: /connect anthropic <token>")}>
-                  Link Account
-                </button>
-              </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        type="password"
+                        placeholder={`Paste ${label} Session Token / Cookie...`}
+                        value={oauthTokens[provider] || ""}
+                        onChange={e => setOauthTokens(prev => ({ ...prev, [provider]: e.target.value }))}
+                        className="settings-input"
+                        style={{ flex: 1, borderRadius: 8, padding: "8px 12px" }}
+                      />
+                      <button
+                        className="settings-btn active"
+                        onClick={() => handleSaveOauth(provider)}
+                        disabled={!oauthTokens[provider]}
+                      >
+                        {isConnected ? "Update Token" : "Link Account"}
+                      </button>
+                      {isConnected && (
+                        <button
+                          className="settings-btn"
+                          onClick={() => handleUnlinkOauth(provider)}
+                        >
+                          Unlink
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
